@@ -1,4 +1,3 @@
-· TS
 export interface Place {
   placeId: string;
   name: string;
@@ -8,7 +7,7 @@ export interface Place {
   category: string;
   isCustom?: boolean;
 }
- 
+
 export interface StayRecord {
   stayId: string;
   placeId: string;
@@ -22,7 +21,7 @@ export interface StayRecord {
   duration?: number;
   date: string;
 }
- 
+
 export interface DiaryEntry {
   diaryId: string;
   placeId: string;
@@ -33,10 +32,10 @@ export interface DiaryEntry {
   createdAt: string;
   date: string;
 }
- 
+
 export type Mood = '😊' | '🥰' | '😐' | '😔' | '😤' | '😴';
 export const MOODS: Mood[] = ['😊', '🥰', '😐', '😔', '😤', '😴'];
- 
+
 export interface NaverSearchResult {
   placeId: string;
   name: string;
@@ -44,5 +43,7 @@ export interface NaverSearchResult {
   roadAddress: string;
   category: string;
   latitude: number;
+  longitude: number;
+}
   longitude: number;
 }
