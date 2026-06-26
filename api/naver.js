@@ -1,3 +1,18 @@
+// 네이버 좌표 파싱 (mapy/mapx → 위도/경도)
+// 네이버는 정수형 문자열로 반환 e.g. "375667990" → 37.5667990
+function parseNaverCoord(val) {
+  if (!val) return 0;
+  const n = parseFloat(val);
+  if (isNaN(n) || n === 0) return 0;
+  // 이미 소수점이 있으면 그대로 반환
+  if (String(val).includes('.')) return n;
+  // 자릿수로 스케일 결정: 위도(37.x)는 9자리, 경도(127.x)는 10자리
+  const digits = String(Math.abs(Math.round(n))).length;
+  if (digits >= 9) return n / 1e7;
+  if (digits >= 8) return n / 1e6;
+  return n / 1e5;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -33,8 +48,8 @@ export default async function handler(req, res) {
       address: item.address || item.roadAddress || '',
       roadAddress: item.roadAddress || '',
       category: item.category || '',
-      latitude: parseFloat(item.mapy) / 1e7,
-      longitude: parseFloat(item.mapx) / 1e7,
+      latitude: parseNaverCoord(item.mapy),
+      longitude: parseNaverCoord(item.mapx),
     }));
 
     res.json({ items, total: data.total });
