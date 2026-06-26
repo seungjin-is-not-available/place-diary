@@ -36,15 +36,18 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
   const [locating, setLocating] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 마운트 시 자동 위치 획득
-  useEffect(() => {
+  const getLocation = () => {
     if (!navigator.geolocation) { setLocating(false); return; }
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => { setUserLat(pos.coords.latitude); setUserLon(pos.coords.longitude); setLocating(false); },
-      () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+      () => { setLocating(false); },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
-  }, []);
+  };
+
+  // 마운트 시 자동 위치 획득
+  useEffect(() => { getLocation(); }, []);
 
   // 타이핑 후 150ms 디바운스 검색
   useEffect(() => {
@@ -120,11 +123,18 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
         <div className="flex justify-between items-center mb-3">
           <div>
             <h2 className="text-lg font-bold">장소 선택</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {locating ? '📍 위치 확인 중...'
-                : userLat ? '📍 가까운 순서로 표시됩니다'
-                : '📍 위치 권한이 없어 기본 순서로 표시됩니다'}
-            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-xs text-gray-400">
+                {locating ? '📍 위치 확인 중...'
+                  : userLat ? `📍 위치 확인됨 (가까운 순)`
+                  : '📍 위치 미확인'}
+              </p>
+              {!locating && (
+                <button onClick={getLocation} className="text-xs text-green-500 underline">
+                  {userLat ? '새로고침' : '위치 재시도'}
+                </button>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="text-gray-400 text-2xl">✕</button>
         </div>
@@ -186,14 +196,4 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
           </button>
           {showManual && (
             <div className="mt-2 space-y-2">
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" placeholder="장소 이름 *" value={manual.name} onChange={(e) => setManual((m) => ({ ...m, name: e.target.value }))} />
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" placeholder="주소 (선택)" value={manual.address} onChange={(e) => setManual((m) => ({ ...m, address: e.target.value }))} />
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" placeholder="카테고리 (선택)" value={manual.category} onChange={(e) => setManual((m) => ({ ...m, category: e.target.value }))} />
-              <button onClick={handleManualSave} className="w-full bg-green-500 text-white py-2 rounded-xl text-sm font-medium">저장</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+ 
