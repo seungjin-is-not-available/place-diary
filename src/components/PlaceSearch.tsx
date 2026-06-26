@@ -32,13 +32,35 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLon, setUserLon] = useState<number | null>(null);
   const [locating, setLocating] = useState(true);
+  const [locationLabel, setLocationLabel] = useState<string>('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const reverseGeocode = async (lat: number, lon: number) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ko`
+      );
+      const data = await res.json();
+      const a = data.address || {};
+      const label = a.quarter || a.neighbourhood || a.suburb || a.village ||
+                    a.town || a.city_district || a.county || a.city || a.state || '';
+      setLocationLabel(label);
+    } catch {
+      setLocationLabel('');
+    }
+  };
 
   const getLocation = () => {
     if (!navigator.geolocation) { setLocating(false); return; }
     setLocating(true);
+    setLocationLabel('');
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setUserLat(pos.coords.latitude); setUserLon(pos.coords.longitude); setLocating(false); },
+      (pos) => {
+        setUserLat(pos.coords.latitude);
+        setUserLon(pos.coords.longitude);
+        setLocating(false);
+        reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+      },
       () => { setLocating(false); },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -115,9 +137,15 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
           <div>
             <h2 className="text-lg font-bold">장소 선택</h2>
             <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-xs text-gray-400">
-                {locating ? '📍 위치 확인 중...' : userLat ? '📍 위치 확인됨 (가까운 순)' : '📍 위치 미확인'}
-              </p>
+              {locating ? (
+                <p className="text-xs text-gray-400">📍 위치 확인 중...</p>
+              ) : userLat ? (
+                <p className="text-xs text-green-600 font-medium">
+                  📍 {locationLabel ? locationLabel : '위치 확인됨'} · 가까운 순
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400">📍 위치 미확인</p>
+              )}
               {!locating && (
                 <button onClick={getLocation} className="text-xs text-green-500 underline">
                   {userLat ? '새로고침' : '위치 재시도'}
@@ -182,14 +210,4 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
           </button>
           {showManual && (
             <div className="mt-2 space-y-2">
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" placeholder="장소 이름 *" value={manual.name} onChange={(e) => setManual((m) => ({ ...m, name: e.target.value }))} />
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" placeholder="주소 (선택)" value={manual.address} onChange={(e) => setManual((m) => ({ ...m, address: e.target.value }))} />
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" placeholder="카테고리 (선택)" value={manual.category} onChange={(e) => setManual((m) => ({ ...m, category: e.target.value }))} />
-              <button onClick={handleManualSave} className="w-full bg-green-500 text-white py-2 rounded-xl text-sm font-medium">저장</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+ 
