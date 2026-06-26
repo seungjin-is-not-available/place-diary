@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getStays, saveStay, deleteDiary } from '../storage';
+import { getStays, saveStay } from '../storage';
 import type { StayRecord, Place } from '../types';
 import PlaceSearch from './PlaceSearch';
 
@@ -25,12 +25,25 @@ export default function Home({ today, onNavigate }: Props) {
     return () => clearInterval(iv);
   }, [activeStay]);
 
-  const fmtElapsed = (s: number) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return h>0?`${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`; };
+  const fmtElapsed = (s: number) => {
+    const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+    return h>0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  };
   const fmtDur = (m?: number) => !m?'':m<60?`${m}분`:`${Math.floor(m/60)}시간 ${m%60}분`;
 
   const handleSelectPlace = (place: Place) => {
     setShowSearch(false);
-    const stay: StayRecord = { stayId: `stay_${Date.now()}`, placeId: place.placeId, placeName: place.name, address: place.address, category: place.category, startTime: new Date().toISOString(), date: today };
+    const stay: StayRecord = {
+      stayId: `stay_${Date.now()}`,
+      placeId: place.placeId,
+      placeName: place.name,
+      address: place.address,
+      category: place.category,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      startTime: new Date().toISOString(),
+      date: today,
+    };
     saveStay(stay);
     setActiveStay(stay);
     setElapsed(0);
@@ -81,7 +94,7 @@ export default function Home({ today, onNavigate }: Props) {
         <div>
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold">오늘 방문한 곳</h2>
-            <button onClick={()=>onNavigate('daily')} className="text-sm text-green-600">전체 보기 →</button>
+            <button onClick={()=>onNavigate('monthly')} className="text-sm text-green-600">전체 보기 →</button>
           </div>
           <div className="space-y-2">
             {stays.slice(-3).map(stay => (
@@ -91,7 +104,8 @@ export default function Home({ today, onNavigate }: Props) {
                   <p className="font-medium text-sm truncate">{stay.placeName}</p>
                   <p className="text-xs text-gray-400">{stay.address}</p>
                 </div>
-                {stay.duration ? <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full whitespace-nowrap">{fmtDur(stay.duration)}</span>
+                {stay.duration
+                  ? <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full whitespace-nowrap">{fmtDur(stay.duration)}</span>
                   : <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">진행 중</span>}
               </div>
             ))}
@@ -104,3 +118,4 @@ export default function Home({ today, onNavigate }: Props) {
     </div>
   );
 }
+
