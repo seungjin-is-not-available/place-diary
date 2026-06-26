@@ -1,4 +1,4 @@
-    export interface Place {
+export interface Place {
   placeId: string;
   name: string;
   address: string;
@@ -43,7 +43,5 @@ export interface NaverSearchResult {
   roadAddress: string;
   category: string;
   latitude: number;
-  longitude: number;
-}
   longitude: number;
 }
