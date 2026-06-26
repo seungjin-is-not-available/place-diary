@@ -1,25 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { searchNaver } from '../api';
 import { savePlace } from '../storage';
 import type { NaverSearchResult, Place } from '../types';
 
 interface Props { onSelect: (place: Place) => void; onClose: () => void; }
 
-// 두 좌표 사이 거리 계산 (Haversine 공식, 단위: m)
+// Haversine 거리 계산 (단위: m)
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
-  const rad = (d: number) => (d * Math.PI) / 180;
-  const dLat = rad(lat2 - lat1);
-  const dLon = rad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const r = (d: number) => (d * Math.PI) / 180;
+  const dLat = r(lat2 - lat1);
+  const dLon = r(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function fmtDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m)}m`;
-  return `${(m / 1000).toFixed(1)}km`;
+function fmtDist(m: number) {
+  return m < 1000 ? `${Math.round(m)}m` : `${(m/1000).toFixed(1)}km`;
+}
+
+// 한국 좌표 유효성 체크
+function validCoord(lat: number, lon: number) {
+  return lat > 33 && lat < 43 && lon > 124 && lon < 132;
 }
 
 export default function PlaceSearch({ onSelect, onClose }: Props) {
@@ -32,51 +34,54 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLon, setUserLon] = useState<number | null>(null);
   const [locating, setLocating] = useState(true);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 컴포넌트 열리면 즉시 위치 가져오기
+  // 마운트 시 자동 위치 획득
   useEffect(() => {
     if (!navigator.geolocation) { setLocating(false); return; }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLat(pos.coords.latitude);
-        setUserLon(pos.coords.longitude);
-        setLocating(false);
-      },
+      (pos) => { setUserLat(pos.coords.latitude); setUserLon(pos.coords.longitude); setLocating(false); },
       () => setLocating(false),
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
     );
   }, []);
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
+  // 타이핑 후 150ms 디바운스 검색
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (query.trim().length < 1) { setResults([]); setError(''); return; }
+    debounceRef.current = setTimeout(() => doSearch(query), 150);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query, userLat, userLon]);
+
+  const doSearch = async (q: string) => {
     setLoading(true);
     setError('');
     try {
-      const data = await searchNaver(query);
+      const data = await searchNaver(q);
+      let items = data.items.map((item) => {
+        // 네이버 좌표 검증 후 거리 계산
+        const hasCoords = item.latitude && item.longitude && validCoord(item.latitude, item.longitude);
+        const distance = (hasCoords && userLat !== null && userLon !== null)
+          ? getDistance(userLat, userLon, item.latitude, item.longitude)
+          : undefined;
+        return { ...item, distance };
+      });
 
-      let items = data.items;
-
-      // 위치가 있으면 거리 계산 후 정렬
+      // 거리 있는 항목 → 거리순, 없는 항목 → 뒤로
       if (userLat !== null && userLon !== null) {
-        items = items
-          .map((item) => ({
-            ...item,
-            distance:
-              item.latitude && item.longitude
-                ? getDistance(userLat, userLon, item.latitude, item.longitude)
-                : undefined,
-          }))
-          .sort((a, b) => {
-            if (a.distance == null) return 1;
-            if (b.distance == null) return -1;
-            return a.distance - b.distance;
-          });
+        items = items.sort((a, b) => {
+          if (a.distance == null && b.distance == null) return 0;
+          if (a.distance == null) return 1;
+          if (b.distance == null) return -1;
+          return a.distance - b.distance;
+        });
       }
 
       setResults(items);
       if (!items.length) setError('검색 결과가 없습니다.');
     } catch (e: any) {
-      setError(e.message || '검색 중 오류가 발생했습니다.');
+      setError(e.message || '검색 오류');
     } finally {
       setLoading(false);
     }
@@ -112,43 +117,44 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
     <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50">
       <div className="bg-white rounded-t-2xl w-full max-w-lg p-5 max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-3">
           <div>
             <h2 className="text-lg font-bold">장소 선택</h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              {locating
-                ? '📍 위치 확인 중...'
-                : userLat
-                ? '📍 위치 확인됨 — 가까운 순으로 정렬됩니다'
-                : '📍 위치 없음 — 네이버 기본 순서로 표시'}
+              {locating ? '📍 위치 확인 중...'
+                : userLat ? '📍 가까운 순서로 표시됩니다'
+                : '📍 위치 권한이 없어 기본 순서로 표시됩니다'}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 text-2xl">✕</button>
         </div>
 
-        {/* Search bar */}
-        <div className="flex gap-2 mb-4">
+        {/* 검색창 — 타이핑만 해도 자동 검색 */}
+        <div className="relative mb-3">
           <input
-            className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-            placeholder="카페, 음식점, 서점..."
+            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 pr-10"
+            placeholder="카페, 음식점, 서점 이름 입력..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             autoFocus
           />
-          <button
-            onClick={handleSearch}
-            disabled={loading || locating}
-            className="bg-green-500 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50 whitespace-nowrap"
-          >
-            {loading ? '검색 중' : '검색'}
-          </button>
+          {loading && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          {!loading && query && (
+            <button onClick={() => { setQuery(''); setResults([]); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">✕</button>
+          )}
         </div>
 
         {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
 
-        {/* Results */}
+        {/* 결과 목록 */}
         <div className="overflow-y-auto flex-1 space-y-2">
+          {!query && !results.length && (
+            <p className="text-center text-gray-400 text-sm py-8">검색어를 입력하면 자동으로 장소가 표시됩니다</p>
+          )}
           {results.map((item) => (
             <button
               key={item.placeId}
@@ -160,14 +166,12 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
                   <p className="font-medium text-sm">{item.name}</p>
                   <p className="text-xs text-gray-500 truncate">{item.roadAddress || item.address}</p>
                   {item.category && (
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full mt-1 inline-block">
-                      {item.category}
-                    </span>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full mt-1 inline-block">{item.category}</span>
                   )}
                 </div>
                 {item.distance != null && (
-                  <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-0.5">
-                    {fmtDistance(item.distance)}
+                  <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full whitespace-nowrap">
+                    {fmtDist(item.distance)}
                   </span>
                 )}
               </div>
@@ -175,12 +179,9 @@ export default function PlaceSearch({ onSelect, onClose }: Props) {
           ))}
         </div>
 
-        {/* Manual registration */}
+        {/* 직접 등록 */}
         <div className="mt-3 border-t pt-3">
-          <button
-            onClick={() => setShowManual(!showManual)}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
+          <button onClick={() => setShowManual(!showManual)} className="text-sm text-gray-500 hover:text-gray-700">
             ➕ 검색에 없는 장소 직접 등록
           </button>
           {showManual && (
